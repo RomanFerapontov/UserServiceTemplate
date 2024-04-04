@@ -1,4 +1,4 @@
-# UserServiceTemplateTemplate
+# UserServiceTemplate
 
 <a name="readme-top"></a>
 
