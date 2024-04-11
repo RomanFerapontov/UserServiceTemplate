@@ -7,6 +7,8 @@ using UserServiceTemplate.Models;
 using AlfaMicroserviceMesh.Models.Action;
 using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Extentions;
+using AlfaMicroserviceMesh.Models.ReqRes;
+using AlfaMicroserviceMesh.Models.Service;
 
 namespace UserServiceTemplate.Handlers;
 
@@ -26,12 +28,12 @@ public class UserHandlers(DataBase db) {
         Handler = async (Context ctx) => {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
 
-            bool existedUser = await db.Users.AnyAsync(u => u.Email == user.Email);
+            var existedUser = await db.Users.AnyAsync(u => u.Email == user.Email);
 
             if (existedUser)
                 throw new MicroserviceException([$"User with email '{user.Email}' already exists"], 400, "ARGUMENT_ERROR");
 
-            User newUser = new() {
+            var newUser = new User {
                 UserName = user.UserName,
                 Uid = Guid.NewGuid().ToString(),
                 Email = user.Email,
@@ -42,12 +44,13 @@ public class UserHandlers(DataBase db) {
             await db.Users.AddAsync(newUser);
             await db.SaveChangesAsync();
 
-            return newUser.ToReadDTO();
+            return new Response {
+                Data = newUser.ToReadDTO()
+            };
         }
     };
 
-    public NewAction SignIn = new() //use the name "SignIn" to provide the JWT in the response
-    { 
+    public NewAction SignIn = new() { //use the name "SignIn" to provide the JWT in the response
         Route = new {
             Method = "POST",
             Path = "Users/SignIn",
@@ -66,7 +69,9 @@ public class UserHandlers(DataBase db) {
             if (Helper.GetHashPassword(user.Password!) != existedUser.Password)
                 throw new MicroserviceException([$"Incorrect password"], 400, "ARGUMENT_ERROR");
 
-            return existedUser.ToReadDTO();
+            return new Response {
+                Data = existedUser.ToReadDTO()
+            };
         }
     };
 
@@ -88,11 +93,13 @@ public class UserHandlers(DataBase db) {
 
             var queryBuilder = new QueryBuilder<User>(db.Users.AsQueryable());
 
-            return await queryBuilder
+            return new Response {
+                Data = await queryBuilder
                 .Filter(parameters)
                 .Build()
                 .Select(u => u.ToReadDTO())
-                .ToListAsync();
+                .ToListAsync()
+            };
         },
     };
 
@@ -105,6 +112,12 @@ public class UserHandlers(DataBase db) {
         Params = new {
             Id = new { Type = "Number", Required = true },
         },
+        RequestTimeout = 2000,
+        RetryPolicy = new RetryPolicy {
+            MaxAttempts = 3,
+            Delay = 300
+        },
+        Caching = false,
         Access = ["USER", "MANAGER", "ADMIN"],
         Handler = async (Context ctx) => {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
@@ -112,7 +125,11 @@ public class UserHandlers(DataBase db) {
             var existedUser = await db.Users.FindAsync(user.Id) ??
                 throw new MicroserviceException([$"User with ID {user.Id} not found"], 400, "ARGUMENT_ERROR");
 
-            return existedUser.ToReadDTO();
+            await Task.Delay(new Random().Next(0, 2) == 0 ? 500 : 3000); // imitation of request delay
+
+            return new Response {
+                Data = existedUser.ToReadDTO()
+            };
         },
     };
 };

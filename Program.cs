@@ -1,6 +1,6 @@
 using AlfaMicroserviceMesh;
-using AlfaMicroserviceMesh.Models;
-using AlfaMicroserviceMesh.Utils;
+using AlfaMicroserviceMesh.Models.Service;
+using AlfaMicroserviceMesh.Services;
 using Microsoft.EntityFrameworkCore;
 using UserServiceTemplate.Handlers;
 using UserServiceTemplate.Libs;
@@ -16,7 +16,13 @@ builder.Services.AddScoped<UserHandlers>();
 var options = new ServiceOptions {
     Name = config["ServiceName"]!,
     Version = config["Version"]!,
-    Transport = config["Connections:RabbitMQ"]!
+    Transport = new MessageBroker {
+        Host = config["Connections:RabbitMQ:Host"],
+        Port = config["Connections:RabbitMQ:Port"],
+    },
+    RetryPolicy = new RetryPolicy { },
+    Logging = true,
+    RequestTimeout = 4000,
 };
 
 ServiceBroker.CreateService(builder, options);
@@ -29,7 +35,7 @@ using var serviceScope = app.Services.CreateScope(); {
     var userHandlers = serviceScope.ServiceProvider.GetRequiredService<UserHandlers>();
     // var otherHandlers = serviceScope.ServiceProvider.GetRequiredService<otherHandlers>();
 
-    HandlersRegistry.AddHandlers([userHandlers, /*otherHandlers*/]); 
+    Handlers.Add([userHandlers, /*otherHandlers*/]); 
 }
 
 app.Run();

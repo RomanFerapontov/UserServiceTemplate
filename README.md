@@ -1,4 +1,4 @@
-# UserServiceTemplateTemplate
+# UserServiceTemplate
 
 <a name="readme-top"></a>
 
@@ -47,7 +47,10 @@ Make sure you enter the variables in `appsettings.js`
   "ServiceName": "Users",
   "Version": "dev",
   "Connections": {
-    "RabbitMQ": "http://host_name:port",
+    "RabbitMQ": {
+      "Host": "host_name",
+      "Port": "port"
+    },
     "MySql": "Server=<DB_Host>;Port=<DB_Port>;Database=<DB_Name>;Uid=root;Pwd=<DB_Password>;"
   },
   "Serilog": {
@@ -98,6 +101,12 @@ public NewAction GetById = new() {
         Params = new {
             Id = new { Type = "Number", Required = true },
         },
+        RequestTimeout = 1000,
+        RetryPolicy = new RetryPolicy {
+            MaxAttempts = 3,
+            Delay = 300
+        },
+        Caching = false,
         Access = ["USER", "MANAGER", "ADMIN"],
         Handler = async (Context ctx) => {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
@@ -112,31 +121,37 @@ public NewAction GetById = new() {
 
 **NewAction** properties:
 
-| Property | Description                      | Required |
-| -------- | -------------------------------- | -------- |
-| Route    | Information about route          | -        |
-| Params   | Parameters that will be received | ✔        |
-| Access   | Roles that allow this route      | -        |
-| Handler  | Action handler function          | ✔        |
+| Property       | Description                      | Required | Default                    |
+| -------------- | -------------------------------- | -------- | -------------------------- |
+| Route          | Information about route          | -        | null                       |
+| Params         | Parameters that will be received | -        | null                       |
+| RequestTimeout | Request timeout limit            | -        | 5000 ms                    |
+| RetryPolicy    | Retry policy                     | -        | MaxAttempts = 1, Delay = 0 |
+| Caching        | Enable request cache             | -        | false                      |
+| Access         | Roles that allow this route      | -        | ["ALL"]                    |
+| Handler        | Action handler function          | ✔        | -                          |
 
 ---
 
 Inside **Params** there is an object with fields, the names of the fields coincide with the names of the request parameters.
 
 ```csharp
-    Params = new {
-        Id = new { Type = "Number", Required = true },
-        Name = new { Type = "String", Desctription = "Name of user" },
-    },
+        Params = new {
+            UserName = new { Type = "String", Required = true, Description = "John" },
+            Email = new { Type = "Email", Required = true, Description = "john@mail.com" },
+            Password = new { Type = "Password", Required = true, Description = "P@ssw0rd123456" },
+            Role = new { Allowed = new List<string> { "USER", "MANAGER", "ADMIN" } },
+        },
 ```
 
 **Params** properties:
 
-| Property    | Description              | Required |
-| ----------- | ------------------------ | -------- |
-| Type        | Parameter data type      | ✔        |
-| Required    | Default - false          | -        |
-| Description | Description of parameter | -        |
+| Property    | Description                  | Required | Default |
+| ----------- | ---------------------------- | -------- | ------- |
+| Type        | Parameter data type          | ✔        | -       |
+| Required    | Default - false              | -        | false   |
+| Description | Description of parameter     | -        | null    |
+| Allowed     | Allowed parameters variables | -        | [ ]     |
 
 _You can add any additional information to object. All this information will be presented in internal microservices documentation (Nodes Registry)_
 
@@ -151,31 +166,34 @@ User user = await ctx.Request.Parameters.ConvertToModel<User>();
 Use **NodeRegestry** class to send request to other microservice with necessary parameters as object:
 
 ```csharp
-object sendingData = await NodesRegistry.Call("Mail", "SendMail", new {
+Response sendingData = await Nodes.Call("Mail", "SendMail", new {
     user.Id,
     Text = "SomeText"
 });
 
-var mail = await sendingData.ConvertToModel<Mail>();
+var mail = await sendingData.Data.ConvertToModel<Mail>();
 ```
 
 ## How to register actions
 
 In `Program.cs`:
-* Register handlers in DI container:
+
+- Register handlers in DI container:
 
 ```csharp
 builder.Services.AddScoped<UserHandlers>();
 ```
 
-* Add handlers to registry as a list:
+- Add handlers to registry as a list:
+
 ```csharp
 using var serviceScope = app.Services.CreateScope(); {
     var userHandlers = serviceScope
         .ServiceProvider
         .GetRequiredService<UserHandlers>();
 
-    HandlersRegistry.AddHandlers([userHandlers]); 
+    Handlers.Add([userHandlers]);
 }
 ```
+
 ---
