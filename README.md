@@ -195,5 +195,4 @@ using var serviceScope = app.Services.CreateScope(); {
     Handlers.Add([userHandlers]);
 }
 ```
-
 ---
