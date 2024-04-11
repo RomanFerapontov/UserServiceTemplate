@@ -79,10 +79,10 @@ dotnet ef database update
 
 ## Running service
 
-Run microservice by command:
+Run microservice by command, input your host and port:
 
 ```sh
-dotnet run
+dotnet run --urls=http://<host>:<port>
 ```
 
 ## Usage
