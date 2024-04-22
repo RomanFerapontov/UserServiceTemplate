@@ -15,10 +15,11 @@
     <li>
       <a href="#usage">Usage</a>
         <ul>
-        <li><a href="#establish-api-gateway">How to create action</a></li>
-        <li><a href="#establish-api-gateway">How to parse request parameters</a></li>
-        <li><a href="#running-application">How to communicate with other microservices</a></li>
-        <li><a href="#add-new-microservice">How to register handlers</a></li>
+        <li><a href="#how-to-create-an-action">How to create an action</a></li>
+        <li><a href="#how-to-create-an-event">How to create an event</a></li>
+        <li><a href="#how-to-parse-request-parameters">How to parse request parameters</a></li>
+        <li><a href="#how-to-communicate-with-other-microservices">How to communicate with other microservices</a></li>
+        <li><a href="#how-to-register-handlers">How to register handlers</a></li>
         </ul>
     </li>
 
@@ -67,6 +68,36 @@ Make sure you enter the variables in `appsettings.js`
 }
 ```
 
+In `Program.cs` set new Service options and pass them to `CreateService` method of ServiceBroker:
+
+```csharp
+var options = new ServiceOptions {
+    Name = config["ServiceName"]!,
+    Version = config["Version"]!,
+    Transport = new ServerAddress {
+        Host = config["Connections:RabbitMQ:Host"]!,
+        Port = config["Connections:RabbitMQ:Port"]!,
+    },
+    RetryPolicy = new RetryPolicy { },
+    Logging = true,
+    RequestTimeout = 4000,
+};
+
+ServiceBroker.CreateService(builder, options);
+```
+
+Properties of **ServiceOptions**:
+
+| Property       | Description                     | Required | Default                    |                   
+| -----------    | ------------------------------- | -------- | -------------------------- |                   
+| Name           | Name of microservice            | ✔        | ""                         |
+| Version        | Version of microservice         | ✔        | ""                         |
+| Transport      | Address of RabbitMQ server      | ✔        | null                       |
+| RequestTimeout | Request timeout                 | -        | 5000                       |
+| RetryPolicy    | Default attempts - 1, delay - 0 | -        | MaxAttempts - 1, Delay - 0 |
+| Logging        | Use Serilog                     | -        | false                      |
+
+---
 If you have MySql server, make migration and data base updating firstly:
 
 ```sh
@@ -87,7 +118,7 @@ dotnet run --urls=http://<host>:<port>
 
 ## Usage
 
-### How to create action
+### How to create an action
 
 Create new action using **NewAction** class within your Handler class:
 
@@ -101,18 +132,21 @@ public NewAction GetById = new() {
         Params = new {
             Id = new { Type = "Number", Required = true },
         },
-        RequestTimeout = 1000,
+        RequestTimeout = 3000,
         RetryPolicy = new RetryPolicy {
             MaxAttempts = 3,
-            Delay = 300
+            Delay = 500
         },
         Caching = false,
         Access = ["USER", "MANAGER", "ADMIN"],
         Handler = async (Context ctx) => {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
+            
+            var existedUser = await db.Users.FindAsync(user.Id);
 
-            var existedUser = await db.Users.FindAsync(user.Id) ??
-                throw new MicroserviceException([$"User with ID {user.Id} not found"], 400, "ARGUMENT_ERROR");
+            if (existedUser == null) {
+              return new Response {};
+            }
 
             return existedUser.ToReadDTO();
         },
@@ -149,11 +183,29 @@ Inside **Params** there is an object with fields, the names of the fields coinci
 | Property    | Description                  | Required | Default |
 | ----------- | ---------------------------- | -------- | ------- |
 | Type        | Parameter data type          | ✔        | -       |
-| Required    | Default - false              | -        | false   |
+| Required    | Make parameter required            | -        | false   |
 | Description | Description of parameter     | -        | null    |
 | Allowed     | Allowed parameters variables | -        | [ ]     |
 
-_You can add any additional information to object. All this information will be presented in internal microservices documentation (Nodes Registry)_
+_You can add any additional information to object. All this information will be presented in internal microservices documentation (Services Registry)_
+
+### How to create an event
+
+Create new event listener using **NewEvent** class within your Handler class:
+
+```csharp
+public NewEvent UserCreated = new() {
+        Handler = async (Context ctx) => {
+          // some logic
+        }
+      }
+```
+
+The Handler function will be called after the `User Created` event fires. Use method `Broadcast` of Services Registry to trigger event. Every service which has event `User Created` will immediately react.
+
+```csharp
+await Services.Broadcast("UserCreated");
+```
 
 ## How to parse request parameters
 
@@ -166,15 +218,18 @@ User user = await ctx.Request.Parameters.ConvertToModel<User>();
 Use **NodeRegestry** class to send request to other microservice with necessary parameters as object:
 
 ```csharp
-Response sendingData = await Nodes.Call("Mail", "SendMail", new {
-    user.Id,
-    Text = "SomeText"
-});
+var parameters = new {
+  UserId = 1,
+  Text = "Some text"
+  ...
+};
 
-var mail = await sendingData.Data.ConvertToModel<Mail>();
+Response data = await Services.Call("Microservice_Name", "Action_Name", parameters);
+
+var responseModel = await sendingData.Data.ConvertToModel<Some_Model>();
 ```
 
-## How to register actions
+## How to register handlers
 
 In `Program.cs`:
 

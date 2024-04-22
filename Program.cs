@@ -1,6 +1,8 @@
 using AlfaMicroserviceMesh;
+using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Models.Service;
-using AlfaMicroserviceMesh.Services;
+using AlfaMicroserviceMesh.Models.Service.Handler;
+using AlfaMicroserviceMesh.Registry;
 using Microsoft.EntityFrameworkCore;
 using UserServiceTemplate.Handlers;
 using UserServiceTemplate.Libs;
@@ -16,9 +18,9 @@ builder.Services.AddScoped<UserHandlers>();
 var options = new ServiceOptions {
     Name = config["ServiceName"]!,
     Version = config["Version"]!,
-    Transport = new MessageBroker {
-        Host = config["Connections:RabbitMQ:Host"],
-        Port = config["Connections:RabbitMQ:Port"],
+    Transport = new ServerAddress {
+        Host = config["Connections:RabbitMQ:Host"]!,
+        Port = config["Connections:RabbitMQ:Port"]!,
     },
     RetryPolicy = new RetryPolicy { },
     Logging = true,

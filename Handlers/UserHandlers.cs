@@ -1,19 +1,19 @@
-using AlfaMicroserviceMesh.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using UserServiceTemplate.Libs;
 using UserServiceTemplate.Helpers;
 using UserServiceTemplate.Mappers;
 using UserServiceTemplate.Models;
-using AlfaMicroserviceMesh.Models.Action;
-using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Models.ReqRes;
 using AlfaMicroserviceMesh.Models.Service;
+using AlfaMicroserviceMesh.Models.Service.Handler;
+using AlfaMicroserviceMesh.Exceptions;
+using AlfaMicroserviceMesh.Constants;
 
 namespace UserServiceTemplate.Handlers;
 
 public class UserHandlers(DataBase db) {
-    public NewAction SignUp = new() { //use the name "SignUp" to provide the JWT in the response
+    public NewAction SignUp = new() {
         Route = new {
             Method = "POST",
             Path = "Users/SignUp",
@@ -31,7 +31,7 @@ public class UserHandlers(DataBase db) {
             var existedUser = await db.Users.AnyAsync(u => u.Email == user.Email);
 
             if (existedUser)
-                throw new MicroserviceException([$"User with email '{user.Email}' already exists"], 400, "ARGUMENT_ERROR");
+                throw new MicroserviceException($"User with email '{user.Email}' already exists", ErrorTypes.ArgumentError);
 
             var newUser = new User {
                 UserName = user.UserName,
@@ -50,7 +50,7 @@ public class UserHandlers(DataBase db) {
         }
     };
 
-    public NewAction SignIn = new() { //use the name "SignIn" to provide the JWT in the response
+    public NewAction SignIn = new() { //use the name "SignIn" or "Login" to provide the JWT in the response
         Route = new {
             Method = "POST",
             Path = "Users/SignIn",
@@ -64,10 +64,10 @@ public class UserHandlers(DataBase db) {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
 
             var existedUser = await db.Users.FirstOrDefaultAsync(u => u.Email == user.Email) ??
-                throw new MicroserviceException([$"User with email '{user.Email}' not found"], 400, "ARGUMENT_ERROR");
+                throw new MicroserviceException($"User with email '{user.Email}' not found", ErrorTypes.ArgumentError);
 
             if (Helper.GetHashPassword(user.Password!) != existedUser.Password)
-                throw new MicroserviceException([$"Incorrect password"], 400, "ARGUMENT_ERROR");
+                throw new MicroserviceException($"Incorrect password", ErrorTypes.ArgumentError);
 
             return new Response {
                 Data = existedUser.ToReadDTO()
@@ -122,8 +122,11 @@ public class UserHandlers(DataBase db) {
         Handler = async (Context ctx) => {
             User user = await ctx.Request.Parameters.ConvertToModel<User>();
 
-            var existedUser = await db.Users.FindAsync(user.Id) ??
-                throw new MicroserviceException([$"User with ID {user.Id} not found"], 400, "ARGUMENT_ERROR");
+            var existedUser = await db.Users.FindAsync(user.Id);
+                
+            if (existedUser == null) {
+                return new Response {};
+            }
 
             await Task.Delay(new Random().Next(0, 2) == 0 ? 500 : 3000); // imitation of request delay
 
